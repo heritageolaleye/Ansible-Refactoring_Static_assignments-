@@ -1,0 +1,35 @@
+---
+- name: Install Apache
+  become: true
+  ansible.builtin.apt:
+    name: "apache2"
+    state: present
+
+- name: Install Git
+  become: true
+  ansible.builtin.apt:
+    name: "git"
+    state: present
+
+- name: Clone repository
+  become: true
+  ansible.builtin.git:
+    repo: https://github.com/heritageolaleye/tooling.git
+    dest: /var/www/html
+    force: yes
+
+- name: Copy HTML content
+  become: true
+  ansible.builtin.command: cp -r /var/www/html/html/ /var/www/
+
+- name: Start Apache service
+  become: true
+  ansible.builtin.service:
+    name: apache2 
+    state: started
+
+- name: Remove cloned directory
+  become: true
+  ansible.builtin.file:
+    path: /var/www/html/html
+    state: absent

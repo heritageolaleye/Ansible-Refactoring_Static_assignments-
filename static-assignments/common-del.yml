@@ -1,0 +1,18 @@
+---
+- name: Delete Wireshark from all servers
+  hosts: all
+  remote_user: ubuntu
+  become: true
+  become_user: root
+
+  tasks:
+    - name: Ensure Wireshark is completely removed
+      apt:
+        name:
+          - wireshark
+          - wireshark-common
+          - wireshark-qt
+        state: absent
+        purge: yes
+        autoremove: yes
+
