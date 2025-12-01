@@ -1,297 +1,294 @@
-## **Introduction**
+## **1. Introduction**
 
-This project's goal is to automate the manual operations performed in Projects 7 to 10 using Ansible Configuration Management. By the help of DevOps tools, we will streamline the process of setting up virtual servers, installing and configuring required software, and deploying web applications.
+This project focuses on improving our Ansible configuration management setup. We will refactor our Ansible code, create assignments, and utilize the imports functionality. Imports allow us to effectively reuse previously created playbooks in new playbooks, enabling better organization and reusability of our tasks.
 
-## **Ansible Client as a Jump Server**
+## **2. Jenkins Job Enhancement**
+To streamline our Jenkins setup, we will create a new job to store artifacts in a centralized location. This approach will improve organization and conserve space on the Jenkins server.
 
-A Jump Server is also known as a Bastion Host, it serves as an intermediary for accessing internal networks securely. In our architecture, the webservers reside in a secured (private) network, inaccessible directly from the Internet. DevOps engineers must use the Jump Server to SSH into the webservers, this practice enhances security and reduces the attack surface.
+*2.1 Create Artifact Directory*
 
-![ansible](/images/ansible39.png)
-
-## **Ansible Installation and Configuration**
-
--  EC2 Instance Preparation
-
-Update the Name tag on the Jenkins EC2 Instance to Jenkins-Ansible. This server will be used to run Ansible playbooks.
-
-- Github REpository Creation
-
-Create a new repository named *ansible-config-mgt* in your GitHub account.
-
-- Ansible Installation
-
-Install Ansible on the jenkins-ansible server:
+- SSH into your Jenkins-Ansible server and create a new directory.
 
 ```bash
-sudo apt update
-sudo apt install ansible -y
+sudo mkdir /home/ubuntu/ansible-config-artifact
 ```
-![ansible!](/images/ansible.jpg)
-
-Verify the installation:
+- Set appropriate permissions so that Jenkins can write to the directory:
 
 ```bash
-ansible --version
+sudo chmod -R 0777 /home/ubunru/ansible-config-artifact
 ```
+![ansible!](/images/ansible1.jpg)
+
+*2.2 Install Copy Artifact Plugin*
+
+1. Navigate to Jenkins web console > Manage Jenkins > Manage Plugins
+2. Search for *Copy Artifact* in the Available tab and install without restarting Jenkins
+
 ![ansible2](/images/ansible2.jpg)
 
-- Jenkins Job Configuration
+*2.3 Create and Configure save_artifacts Job*
 
-Configure a Jenkins job save your repository content automatically:
+1. Create a new Freestyle project named *save_artifacts*
+2. In the Build Triggers section, configure it to be triggered upon completion of the existing ansible project.
+3. In the Build step, choose "Copy artifacts from other project"
+  - Source project: ansible
+  - Target directory: /home/ubuntu/ansible-config-artifact
 
-1. Set up a webhook in Github:
+*2.4 Verify Setup*
+1. Make a minor change to the README.md file in your ansible-config-mgt repository
+2. Observe both Jenkins jobs running sequentially
+3. Verify that files are copied to /home/ubuntu/ansible-config-artifact
 
-- Go to your ansible-config-mgt repository
-- Navigate to Settings > Webhooks > Add webhook
+If you encounter permission issues, add the Jenkins user to the ubuntu group:
 
-![ansible3](/images/ansible3.png)
-
-2. Create a new Freestyle project in Jenkins named ansible:
-
+```bash
+sudo usermod -a -G Jenkins Ubuntu
+```
+![ansible3](/images/ansible3.jpg)
 ![ansible4](/images/ansible4.jpg)
-
-3. Configure Source Code Management:
-
-- Choose Git
-- Provide the ansible-config-mgt repository URL
-- Add credentials for Jenkins to access the repository
-
 ![ansible5](/images/ansible5.jpg)
 
-4. Configure Build Triggers:
+## **3. Refactoring Ansible Code**
 
-- Select "GitHub hook trigger for GITScm polling"
+We will refactor our Ansible code to improve organization and reusability.
 
+*3.1 Create New Branch*
+
+Create a new branch named refactor in your ansible-config-mgt repository using this command:
+
+```bash
+git checkout -b refactor
+```
 ![ansible6](/images/ansible6.jpg)
 
-5. Configure Post-build Actions:
+*3.2 Reorganize Directory Structure*
 
-- Archive all files: **
+1. Create a new folder naamed *static-assignments* in the repository root
+2. Move the *common.yml*  file into the static-assignments folder
+3. Create a new file *site.yml* in the playbooks folder.
+
 ![ansible7](/images/ansible7.jpg)
-
-5. Testing the Setup
-
-Make a change to the README.md file in the main branch and ensure that the build starts automatically.
 
 ![ansible8](/images/ansible8.jpg)
 
-![ansible9](/images/ansible9.jpg)
+Your folder structure should now look like this:
 
-* Allocate an Elastic IP to your Jenkins-Ansible server to maintain a consistent IP address for your GitHub webhook configuration.
+```bash
+ansible-config-mgt/
+├── static-assignments/
+│   └── common.yml
+├── inventory/
+│   ├── dev
+│   ├── stage
+│   ├── uat
+│   └── prod
+└── playbooks/
+    └── site.yml
+```
+*3.3 Updates site.yml*
+
+Edit *site.yml* to import the common.yml playbook:
+
+```bash
+---
+- hosts: all
+- import_playbook: ../static-assignments/common.yml
+```
+*3.4 Create common-del.yml*
+
+1. Create common-del.yml in the static-assignments folder
+2. Add tasks to remove wireshark from all servers:
+
+```bash
+---
+- name: Delete Wireshark from all servers
+  hosts: all
+  remote_user: ubuntu
+  become: true
+  become_user: root
+
+  tasks:
+    - name: Ensure Wireshark is completely removed
+      apt:
+        name:
+          - wireshark
+          - wireshark-common
+          - wireshark-qt
+        state: absent
+        purge: yes
+        autoremove: yes
+```
+3. Update *site.yml* to use *common-del.yml*:
+
+```bash
+- hosts: all
+- import_playbook: ../static-assignments/common.yml
+```
+*3.5 Run Playbook*
+Execute the playbook against the dev environment:
+
+```bash
+cd /home/ubuntu/ansible-config-mgt/
+ansible-playbook -i inventory/dev.ini playbooks/site.yaml
+```
+Verify that wireshark has been removed from all servers by running:
+
+```bash
+wireshark --version
+```
+![ansible9](/images/ansible9.jpg)
 
 ![ansible10](/images/ansible10.jpg)
 
+## **4. Configuring UAT Webservers.
+We will now set up two new UAT webservers using a dedicated role.
+
+*4.1 Launch UAT Instances*
+
+Create two EC2 instances using RHEL 9 image. Name them Web1-UAT and Web2-UAT.
+
 ![ansible11](/images/ansible11.jpg)
 
+*4.2 Create Webserver Role*
 
-## **Development Environment Preparation**
+1. Create a roles directory in your ansible-config-mgt repository
+2. Initialize the webserver role:
 
-1. Install Visual Studio Code
-
-Download and install [Visual Studio Code](https://code.visualstudio.com/download) as your integrated Development Environment(IDE)
-
-2. Configure VS Code for GitHub
-
-Connect VS Code to your newly created GitHub repository:
-
+```bash
+mkdir roles
+cd roles
+ansible-galaxy init webserver
+```
 ![ansible12](/images/ansible12.jpg)
 
-## **Ansible Development**
+3. Remove unnecessary directories (tests, files, vars)
 
-1. Create Feature Branch
-
-Create a new branch for Development:
-
-```bash
-git checkout -b feature/prj-11-ansible-config
-```
 ![ansible13](/images/ansible13.jpg)
-
-2.  Create Playbook and Inventory Files
-
-Create the initial playbook and inventory files:
-
-```bash
-touch playbooks/common.yml
-touch inventory/dev.ini inventory/staging.ini inventory/uat.ini inventory/prod.ini
-```
 ![ansible14](/images/ansible14.jpg)
 
-![ansible15](/images/ansible15.jpg)
+*4.3 Update Inventory*
 
+Add the UAT webservers to your inventory file ansible-config-mgt/inventory/uat.ini:
+
+```bash
+[uat-webservers]
+<Web1-UAT-Server-Private-IP-Address> ansible_ssh_user='ec2-user'
+<Web2-UAT-Server-Private-IP-Address> ansible_ssh_user='ec2-user'
+```
+** 4.4 Configure Ansible**
+Update /etc/ansible/ansible.cfg or ~/.ansible.cfg or the ansible.cfg file in your playbooks directory to include the roles path:
+
+```bash
+roles_path = /home/ubuntu/ansible-config-mgt/roles
+```
+## ** Implementing the Webserver Role**
+
+**5.1 Define Webserver Tasks**
+
+Edit roles/webserver/tasks/main.yml:
+
+```bash
+---
+- name: Install Apache
+  become: true
+  ansible.builtin.apt:
+    name: "apache2"
+    state: present
+
+- name: Install Git
+  become: true
+  ansible.builtin.apt:
+    name: "git"
+    state: present
+
+- name: Clone repository
+  become: true
+  ansible.builtin.git:
+    repo: https://github.com/heritageolaleye/tooling.git
+    dest: /var/www/html
+    force: yes
+
+- name: Copy HTML content
+  become: true
+  ansible.builtin.command: cp -r /var/www/html/html/ /var/www/
+
+- name: Start Apache service
+  become: true
+  ansible.builtin.service:
+    name: apache2 
+    state: started
+
+- name: Remove cloned directory
+  become: true
+  ansible.builtin.file:
+    path: /var/www/html/html
+    state: absent
+```
+**5.3 Update site.yml**
+
+Update playbooks/site.yml to include the new assignment:
+
+```bash
+---
+- hosts: all
+- import_playbook: ../static-assignments/common.yml
+
+- hosts: uat-webservers
+  import_playbook: ../static-assignments/uat-webservers.yml
+```
+## **Testing and Deployment**
+
+**6.1 Commit changes**
+Commit your changes by running this command:
+
+```bash
+git commit -m "Refactoring and static assignments"
+```
+Create a Pull Request by running this command:
+
+```bash
+git push --set-upstream origin refactor
+```
 ![ansible16](/images/ansible16.jpg)
 
-## Ansible Inventory Setup
-
-An Ansible inventory file defines the hosts and groups of hosts upon which commands, modules, and tasks in a playbook operate. We will set up the inventory to organize our servers for different environments.
-
-## *8SSH Agent Configuration**
-
-Ansible uses SSH to connect to target servers. Set up SSH agent to manage your SSH keys:
-
-```bash
-eval `ssh-agent -s`
-ssh-add <path-to-private-key>
-ssh-add -l
-```
-
-```bash
-Get-Service ssh-agent | Set-Service -StartupType Automatic
-
-Start-Service ssh-agent
-
-Get-Service ssh-agent
-
-ssh-add "Path/to/key.pem"
-```
 ![ansible17](/images/ansible17.jpg)
 
 ![ansible18](/images/ansible18.jpg)
 
+**6.2 Run Jenkins Jobs**
+
+Ensure that the webhook triggers two consecutive Jenkins jobs and that they run successfully.
 ![ansible19](/images/ansible19.jpg)
 
 ![ansible20](/images/ansible20.jpg)
 
-Connect to your Jenkins-Ansible server using SSH agent:
+**6.3 Execute Playbook**
+
+Run the playbook against the UAT inventory:
 
 ```bash
-ssh -A ennoiaconcept@<public-ip>
+cd /home/ubuntu/ansible-config-artifact
+ansible-playbook -i inventory/uat.ini playbooks/site.yml
 ```
 ![ansible21](/images/ansible21.jpg)
 
-## **Update Inventory File**
+**6.4 Verify Deployment**
 
-Update your inventory/dev.ini file with the following structure:
+Access the UAT webservers through a web browser:
 
 ```bash
-all:
-  children:
-    nfs:
-      hosts:
-        <NFS-Server-Private-IP-Address>:
-          ansible_ssh_user: ec2-user
-    webservers:
-      hosts:
-        <Web-Server1-Private-IP-Address>:
-          ansible_ssh_user: ec2-user
-        
-    db:
-      hosts:
-        <Database-Private-IP-Address>:
-          ansible_ssh_user: ubuntu
+http://<Web1-UAT-Server-Public-IP-or-Public-DNS-Name>/index.php
+http://<Web2-UAT-Server-Public-IP-or-Public-DNS-Name>/index.php
 ```
-
 ![ansible22](/images/ansible22.jpg)
 
-## **Creating a Common Playbook**
-
-Create a common playbook to perform tasks on all servers listed in the inventory.
-
-Update your playbooks/common.yml file:
-
-```bash
----
-- name: Update web and NFS servers
-  hosts: webservers, nfs
-  remote_user: ubuntu
-  become: true
-  become_user: root
-  tasks:
-    - name: Ensure wireshark is at the latest version
-      yum:
-        name: wireshark
-        state: latest
-
-- name: Update LB and DB servers
-  hosts: lb, db
-  remote_user: ubuntu
-  become: true
-  become_user: root
-  tasks:
-    - name: Update apt repo
-      apt:
-        update_cache: yes
-
-    - name: Ensure wireshark is at the latest version
-      apt:
-        name: wireshark
-        state: latest
-
-```
-
-![ansible24](/images/ansible24.jpg)
-
-This playbook installs or updates wireshark on both RHEL 9 and Ubuntu servers, using the appropriate package manager for each OS. It then creates a directory named Kosenuel_directory and a file named Kose_file.txt inside the directory. After that, it runs a script on the webservers to store some dynamic greeting message in a file named server_greeting.txt in the /tmp/ directory.
-
-
-## **Version Control with Git**
-
-## **Commit and Push Changes**
-
-Use Git commands to add, commit, and push your changes:
-
-```bash 
-git status
-git add <selected files>
-git commit -m "Initial commit: add inventory and common playbook"
-git push origin feature/prj-11-ansible-config
-```
-![ansible25](/images/ansible25.jpg)
-
-![ansible26](/images/ansible26.jpg)
-
-## **Update Local Repository**
-
-After merging, update your local main branch:
-
-```bash
-git checkout master
-git pull origin master
-```
-![ansible27](/images/ansible27.jpg)
-
-Jenkins will automatically build and archive the changes:
-
-![ansible28](/images/ansible28.jpg)
-
-## **Executing Ansible Playbook**
-
-Setup Remote Development in VS Code
-
-1. Install the Remote Development and Remote - SSH extensions in VS Code.
-
-![ansible29](/images/ansible29.jpg)
-
-## **Run Ansible Playbook**
-
-Execute the ansible playbook:
-
-```bash
-ansible playbook -i inventory/dev.ini playbooks/common.yml
-```
-![ansible30](/images/ansible30.jpg)
-
-## **Verify Installation**
-
-Check if wireshark is installed on each server:
-
-```bash
-which wireshark
-wireshark --version
-```
-![ansible31](/images/ansible31.jpg)
-
-[ansible32](/images/ansible32.jpg)
-
-[ansible33](/images/ansible33.jpg)
+![ansible23](/images/ansible23.jpg)
 
 ## **Conclusion**
 
-We have successfully automated our routine tasks by implementing Ansible configurations. The updated architecture now looks like this:
+With this, we come to the end of the Ansible refactoring and implementation of static assignments/project. This new structure we implemented improves code organization, reusability, and maintainability. The Ansible architecture now includes dedicated roles and a more modular approach to configuration management.
 
-![ansible35](/images/ansible35.png)
-
-Copy-ansible-artifact
+![ansible24](/images/ansible24.png)
 
 
 
